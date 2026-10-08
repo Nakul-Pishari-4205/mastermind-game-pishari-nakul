@@ -40,6 +40,8 @@
     .brand-name { font-weight:800; letter-spacing:-.04em; font-size:16px; }
     .brand-name small { display:block; color:var(--muted); font-size:10px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; margin-top:1px; }
     .top-actions { display:flex; align-items:center; gap:10px; }
+    .account-button { border:1px solid rgba(170,140,255,.4); color:var(--text); background:rgba(170,140,255,.11); border-radius:999px; padding:9px 14px; font-size:12px; font-weight:800; cursor:pointer; transition:.2s; }
+    .account-button:hover { background:rgba(170,140,255,.2); }
     .pill, .icon-button { border:1px solid var(--line); color:var(--muted); background:rgba(255,255,255,.035); border-radius:999px; padding:9px 13px; font-size:12px; font-weight:700; }
     .icon-button { cursor:pointer; color:var(--text); transition:background .2s,border-color .2s; }
     .icon-button:hover { background:rgba(255,255,255,.09); border-color:rgba(255,255,255,.2); }
@@ -144,6 +146,20 @@
     .modal ul { padding-left:20px; margin:12px 0 20px; }
     .modal li { margin:7px 0; }
     .modal-footer { display:flex; justify-content:flex-end; gap:9px; margin-top:18px; }
+    .auth-form { display:grid; gap:12px; margin-top:18px; }
+    .auth-input { width:100%; border:1px solid var(--line); border-radius:11px; padding:12px 13px; background:rgba(0,0,0,.2); color:var(--text); font:inherit; font-size:13px; }
+    .auth-input:focus { outline:2px solid rgba(170,140,255,.55); outline-offset:1px; }
+    .auth-error { min-height:18px; margin:0; color:var(--pink) !important; font-size:12px !important; }
+    .auth-divider { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:11px; margin:16px 0 12px; }
+    .auth-divider:before,.auth-divider:after { content:""; flex:1; height:1px; background:var(--line); }
+    .provider-list { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+    .provider-button { border:1px solid var(--line); color:var(--text); background:rgba(255,255,255,.045); border-radius:11px; padding:10px 8px; font-size:11px; font-weight:750; cursor:pointer; }
+    .provider-button:hover { background:rgba(255,255,255,.09); }
+    .auth-switch { border:0; padding:0; color:var(--purple); background:none; font-size:12px; font-weight:750; cursor:pointer; }
+    .account-summary { margin:18px 0 12px; padding:15px; border:1px solid var(--line); border-radius:13px; background:rgba(255,255,255,.03); }
+    .account-summary strong { display:block; font-size:13px; word-break:break-word; }
+    .account-summary span { color:var(--muted); display:block; font-size:11px; margin-top:5px; }
+    .auth-config-note { border:1px solid rgba(255,209,102,.25); border-radius:12px; background:rgba(255,209,102,.07); padding:12px; }
     .secret-picker { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin:23px 0; }
     .picker-slot { display:grid; place-items:center; width:44px;height:44px; border:1px dashed #ffffff4a; border-radius:50%; color:#777a8c; font-weight:800; }
     .picker-slot.selected { border:0; box-shadow:inset 0 3px 6px #ffffff70,inset 0 -7px 9px #0005,0 4px 12px #0005; color:transparent; }
@@ -159,6 +175,7 @@
     @media(max-width:680px) {
       .shell { width:min(100% - 28px,540px); padding-top:17px; }
       .topbar { margin-bottom:28px; }
+      .pill { display:none; }
       .hero { display:block; margin:20px 0 29px; }
       .code-art { display:none; }
       .intro { font-size:14px; }
@@ -193,6 +210,7 @@
       </a>
       <div class="top-actions">
         <span class="pill">A little logic. A lot of glory.</span>
+        <button class="account-button" id="account-button">Sign in</button>
         <button class="icon-button" id="help-button" aria-label="How to play">? <span class="help-label">How to play</span></button>
       </div>
     </header>
@@ -228,7 +246,7 @@
           <button class="primary-button" id="start-button">Start a game <span aria-hidden="true">→</span></button>
         </div>
       </section>
-      <div class="footer">No downloads, no sign-up. Just a good little brain workout.</div>
+      <div class="footer">No downloads. Sign in to keep your game stats with you.</div>
     </section>
 
     <section id="game-screen" class="hidden">
@@ -266,6 +284,8 @@
     <div class="modal" id="modal-content"></div>
   </div>
   <div class="toast" id="toast" role="status"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./supabase-config.js"></script>
   <script>
     (() => {
       "use strict";
@@ -283,7 +303,16 @@
         { name: "Lilac", hex: "#d3a0f2" }, { name: "Lime", hex: "#aad958" }
       ];
       const $ = (id) => document.getElementById(id);
-      const state = { mode: "solo", level: "medium", code: [], guess: [], history: [], round: 1, wins: 0, active: false, secret: [], aiPossible: null, aiPool: null };
+      const state = { mode: "solo", level: "medium", code: [], guess: [], history: [], round: 1, wins: 0, active: false, secret: [], aiPossible: null, aiPool: null, user: null };
+      const supabaseConfig = window.MASTERMIND_SUPABASE || {};
+      const isSupabaseConfigured = Boolean(
+        supabaseConfig.url && supabaseConfig.anonKey &&
+        !supabaseConfig.url.includes("YOUR_PROJECT") &&
+        !supabaseConfig.anonKey.includes("YOUR_SUPABASE")
+      );
+      const supabaseClient = isSupabaseConfigured && window.supabase
+        ? window.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey)
+        : null;
 
       function randInt(max) { return Math.floor(Math.random() * max); }
       function randomCode(size, colorCount) { return Array.from({ length: size }, () => randInt(colorCount)); }
@@ -483,6 +512,7 @@
       function finishRound(won) {
         state.active = false;
         if (won) state.wins++;
+        saveRoundResult(won);
         $("game-title").textContent = state.mode === "ai"
           ? (won ? "The AI cracked it!" : "The code held.")
           : (won ? "Code cracked!" : "Code revealed.");
@@ -652,6 +682,158 @@
       }
       function showModal() { $("modal-backdrop").classList.remove("hidden"); }
       function hideModal() { $("modal-backdrop").classList.add("hidden"); }
+      function accountRedirectUrl() {
+        return `${window.location.origin}${window.location.pathname}`;
+      }
+      function updateAccountButton() {
+        const button = $("account-button");
+        button.textContent = state.user ? "My account" : "Sign in";
+        button.setAttribute("aria-label", state.user ? "Open account" : "Sign in or create an account");
+      }
+      async function loadAccountStats(container) {
+        if (!supabaseClient || !state.user) return;
+        const stats = container.querySelector("#account-stats");
+        if (!stats) return;
+        try {
+          const [played, won] = await Promise.all([
+            supabaseClient.from("game_rounds").select("id", { count: "exact", head: true }),
+            supabaseClient.from("game_rounds").select("id", { count: "exact", head: true }).eq("won", true)
+          ]);
+          if (played.error || won.error) {
+            stats.textContent = `Could not load saved stats: ${(played.error || won.error).message}`;
+            return;
+          }
+          stats.textContent = `${played.count || 0} rounds played · ${won.count || 0} wins`;
+        } catch (error) {
+          stats.textContent = `Could not load saved stats: ${error.message || "connection failed"}`;
+        }
+      }
+      async function saveRoundResult(won) {
+        if (!supabaseClient || !state.user) return;
+        try {
+          const { error } = await supabaseClient.from("game_rounds").insert({
+            user_id: state.user.id,
+            difficulty: state.level,
+            mode: state.mode,
+            won,
+            guesses_used: state.history.length
+          });
+          if (error) showToast(`Round played, but it couldn't be saved: ${error.message}`);
+        } catch (error) {
+          showToast(`Round played, but it couldn't be saved: ${error.message || "connection failed"}`);
+        }
+      }
+      function showAccount() {
+        if (!supabaseClient) {
+          $("modal-content").innerHTML = `<div class="eyebrow">Account sync</div><h2 id="modal-title">Connect your Supabase project</h2><p>Sign-up and private cross-device game stats are ready to use once this site is linked to your Supabase project.</p><div class="auth-config-note"><p style="margin:0">Set your Supabase Project URL and publishable (anon) key in <code>supabase-config.js</code>, then run the SQL in <code>supabase/schema.sql</code>. Enable your desired providers and add this website URL to Supabase’s redirect allow list.</p></div><div class="modal-footer"><button class="primary-button" id="close-auth">Got it</button></div>`;
+          showModal();
+          $("close-auth").addEventListener("click", hideModal);
+          return;
+        }
+        if (state.user) {
+          const email = state.user.email || "Signed-in player";
+          $("modal-content").innerHTML = `<div class="eyebrow">Your private account</div><h2 id="modal-title">Welcome back.</h2><div class="account-summary"><strong id="account-email"></strong><span id="account-stats">Loading your saved stats…</span></div><p>Your round results are private to your account and can follow you across devices.</p><div class="modal-footer"><button class="secondary-button" id="sign-out-button">Sign out</button><button class="primary-button" id="close-auth">Done</button></div>`;
+          $("account-email").textContent = email;
+          showModal();
+          loadAccountStats($("modal-content"));
+          $("close-auth").addEventListener("click", hideModal);
+          $("sign-out-button").addEventListener("click", async () => {
+            try {
+              const { error } = await supabaseClient.auth.signOut();
+              if (error) { showToast(error.message); return; }
+              hideModal();
+              showToast("You have signed out.");
+            } catch (error) {
+              showToast(`Could not sign out: ${error.message || "connection failed"}`);
+            }
+          });
+          return;
+        }
+        renderAuthForm("signup");
+      }
+      function renderAuthForm(view, message = "") {
+        const signingUp = view === "signup";
+        $("modal-content").innerHTML = `<div class="eyebrow">Your game, wherever you play</div><h2 id="modal-title">${signingUp ? "Create your account." : "Welcome back."}</h2><p>${signingUp ? "Sign up to keep your Mastermind round stats private and synced across devices." : "Sign in to see your saved game stats."}</p>
+          <form class="auth-form" id="auth-form">
+            ${signingUp ? '<label><span class="difficulty-label">Name (optional)</span><input class="auth-input" name="name" type="text" maxlength="80" autocomplete="name" placeholder="Your name"></label>' : ""}
+            <label><span class="difficulty-label">Email</span><input class="auth-input" name="email" type="email" autocomplete="email" required placeholder="you@example.com"></label>
+            <label><span class="difficulty-label">Password</span><input class="auth-input" name="password" type="password" minlength="8" autocomplete="${signingUp ? "new-password" : "current-password"}" required placeholder="At least 8 characters"></label>
+            <p class="auth-error" id="auth-error" role="status" aria-live="polite"></p>
+            <button class="primary-button" type="submit">${signingUp ? "Create account" : "Sign in"} →</button>
+          </form>
+          <div class="auth-divider">or continue with</div>
+          <div class="provider-list"><button type="button" class="provider-button" data-provider="google">Google</button><button type="button" class="provider-button" data-provider="azure">Microsoft</button><button type="button" class="provider-button" data-provider="apple">Apple</button></div>
+          <div class="modal-footer"><button type="button" class="auth-switch" id="auth-switch">${signingUp ? "Already have an account? Sign in" : "New here? Create an account"}</button><button type="button" class="secondary-button" id="close-auth">Close</button></div>`;
+        showModal();
+        $("close-auth").addEventListener("click", hideModal);
+        $("auth-switch").addEventListener("click", () => renderAuthForm(signingUp ? "signin" : "signup"));
+        $("auth-form").addEventListener("submit", async event => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          const email = String(form.get("email") || "").trim();
+          const password = String(form.get("password") || "");
+          const errorElement = $("auth-error");
+          const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+          submitButton.disabled = true;
+          errorElement.textContent = signingUp ? "Creating your account…" : "Signing in…";
+          try {
+            let result;
+            if (signingUp) {
+              const name = String(form.get("name") || "").trim();
+              result = await supabaseClient.auth.signUp({
+                email,
+                password,
+                options: {
+                  data: name ? { display_name: name } : {},
+                  emailRedirectTo: accountRedirectUrl()
+                }
+              });
+            } else {
+              result = await supabaseClient.auth.signInWithPassword({ email, password });
+            }
+            if (result.error) {
+              errorElement.textContent = result.error.message;
+            } else if (signingUp && !result.data.session) {
+              errorElement.textContent = "Account created. Check your email to confirm it, then sign in.";
+            } else {
+              hideModal();
+              showToast(signingUp ? "Your account is ready." : "Signed in successfully.");
+            }
+          } catch (error) {
+            errorElement.textContent = error.message || "Could not reach Supabase. Check your connection and project settings.";
+          } finally {
+            submitButton.disabled = false;
+          }
+        });
+        $("modal-content").querySelectorAll("[data-provider]").forEach(button => {
+          button.addEventListener("click", async () => {
+            const provider = button.dataset.provider;
+            const errorElement = $("auth-error");
+            errorElement.textContent = `Connecting to ${provider === "azure" ? "Microsoft" : provider}…`;
+            const options = { redirectTo: accountRedirectUrl() };
+            if (provider === "azure") options.scopes = "email";
+            try {
+              const { error } = await supabaseClient.auth.signInWithOAuth({ provider, options });
+              if (error) errorElement.textContent = error.message;
+            } catch (error) {
+              errorElement.textContent = error.message || "Could not start social sign-in. Check your provider settings.";
+            }
+          });
+        });
+      }
+      function initializeAuth() {
+        updateAccountButton();
+        if (!supabaseClient) return;
+        supabaseClient.auth.getSession().then(({ data, error }) => {
+          if (error) { showToast(`Could not check sign-in status: ${error.message}`); return; }
+          state.user = data.session?.user || null;
+          updateAccountButton();
+        }).catch(error => showToast(`Could not check sign-in status: ${error.message || "connection failed"}`));
+        supabaseClient.auth.onAuthStateChange((_event, session) => {
+          state.user = session?.user || null;
+          updateAccountButton();
+        });
+      }
       function showHelp() {
         $("modal-content").innerHTML = `<div class="eyebrow">Quick guide</div><h2 id="modal-title">How to play</h2><p>Mastermind is a codebreaking game. Find the hidden sequence before you run out of guesses.</p><ul><li><b>Make a guess:</b> choose colors in order, then submit. Repeated colors are allowed.</li><li><b>Read the clues:</b> a bright white dot is a correct color in the correct position. A mint dot is a correct color in the wrong position.</li><li><b>No color labels:</b> clue dots don't map to any particular peg, and their order is not meaningful.</li><li><b>Win:</b> get every peg exactly right within 10 guesses. Each difficulty has 10 rounds.</li><li><b>Pass &amp; play:</b> Player 1 sets a code, then hands the device to Player 2. Keep the code secret!</li></ul><p>Easy is a gentle warm-up; Extreme has 6 pegs and 10 colors. Good luck!</p><div class="modal-footer"><button class="primary-button" id="close-help">Got it</button></div>`;
         showModal();
@@ -692,6 +874,7 @@
         $("setup-screen").classList.remove("hidden");
       });
       $("help-button").addEventListener("click", showHelp);
+      $("account-button").addEventListener("click", showAccount);
       $("modal-backdrop").addEventListener("click", event => { if (event.target === $("modal-backdrop")) hideModal(); });
       document.addEventListener("keydown", event => {
         if (event.key === "Escape" && !$("modal-backdrop").classList.contains("hidden")) hideModal();
@@ -701,6 +884,7 @@
         if (event.key === "Backspace") { state.guess.pop(); renderCurrent(); }
         if (event.key === "Enter" && ! $("submit-button").disabled && state.mode !== "ai") submit();
       });
+      initializeAuth();
     })();
   </script>
 </body>
